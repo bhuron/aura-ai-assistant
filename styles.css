@@ -532,6 +532,15 @@ small {
   border-radius: 12px;
   font-size: 14px;
   font-weight: 500;
+  transition: all 0.2s;
+}
+
+#sendBtn.stop-btn {
+  background: #dc3545;
+}
+
+#sendBtn.stop-btn:hover {
+  background: #c82333;
 }
 
 textarea {

@@ -4,6 +4,8 @@ let selectedTabIds = new Set();
 let currentModel = '';
 let currentTabId = null;
 let conversationsByTab = {}; // Store conversations per tab
+let currentPort = null;
+let isGenerating = false;
 
 const suggestedPrompts = [
   'Summarize this page',
@@ -13,7 +15,13 @@ const suggestedPrompts = [
   'What questions does this raise?'
 ];
 
-document.getElementById('sendBtn').addEventListener('click', sendMessage);
+document.getElementById('sendBtn').addEventListener('click', () => {
+  if (isGenerating) {
+    stopGeneration();
+  } else {
+    sendMessage();
+  }
+});
 document.getElementById('userInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -283,6 +291,8 @@ function updateSelectedTabs() {
 }
 
 async function sendMessage() {
+  if (isGenerating) return;
+  
   const input = document.getElementById('userInput');
   const message = input.value.trim();
   
@@ -292,6 +302,10 @@ async function sendMessage() {
   hideTabSuggestions();
   hideSuggestedPrompts();
   addMessage(message, 'user');
+  
+  // Update UI for generating state
+  isGenerating = true;
+  updateSendButton();
   
   // Get content from selected tabs or current tab
   let pageContents = [];
@@ -310,18 +324,19 @@ async function sendMessage() {
   let fullReply = '';
   
   try {
-    const port = chrome.runtime.connect({ name: 'chat-stream' });
+    currentPort = chrome.runtime.connect({ name: 'chat-stream' });
     
-    port.postMessage({
+    currentPort.postMessage({
       message: message,
       pageContents: pageContents,
       history: conversationHistory,
       model: currentModel
     });
     
-    port.onMessage.addListener((response) => {
+    currentPort.onMessage.addListener((response) => {
       if (response.error) {
         updateMessage(messageId, `Error: ${response.error}`);
+        stopGeneration();
       } else if (response.chunk) {
         fullReply += response.chunk;
         updateMessage(messageId, fullReply);
@@ -330,11 +345,36 @@ async function sendMessage() {
           { role: 'user', content: message },
           { role: 'assistant', content: fullReply }
         );
-        port.disconnect();
+        stopGeneration();
       }
+    });
+    
+    currentPort.onDisconnect.addListener(() => {
+      stopGeneration();
     });
   } catch (error) {
     updateMessage(messageId, `Error: ${error.message}`);
+    stopGeneration();
+  }
+}
+
+function stopGeneration() {
+  if (currentPort) {
+    currentPort.disconnect();
+    currentPort = null;
+  }
+  isGenerating = false;
+  updateSendButton();
+}
+
+function updateSendButton() {
+  const sendBtn = document.getElementById('sendBtn');
+  if (isGenerating) {
+    sendBtn.textContent = 'Stop';
+    sendBtn.classList.add('stop-btn');
+  } else {
+    sendBtn.textContent = 'Send';
+    sendBtn.classList.remove('stop-btn');
   }
 }
 
