@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Aura Settings</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="popup">
+  <div class="container">
+    <h2>Aura Settings</h2>
+    
+    <div class="form-group">
+      <label for="apiProvider">API Provider:</label>
+      <select id="apiProvider">
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+        <option value="custom">Custom</option>
+      </select>
+    </div>
+
+    <div class="form-group" id="customUrlGroup" style="display: none;">
+      <label for="apiUrl">API URL:</label>
+      <input type="text" id="apiUrl" placeholder="https://api.example.com/v1/chat/completions">
+    </div>
+
+    <div class="form-group">
+      <label for="apiKey">API Key:</label>
+      <input type="password" id="apiKey" placeholder="Enter your API key">
+    </div>
+
+    <div class="form-group">
+      <label for="model">Default Model:</label>
+      <input type="text" id="model" placeholder="gpt-4">
+    </div>
+
+    <div class="form-group" id="customModelsGroup">
+      <label for="customModels">Available Models (comma-separated):</label>
+      <input type="text" id="customModels" placeholder="model-1, model-2, model-3">
+      <small>For custom providers, list all models you want to switch between</small>
+    </div>
+
+    <div class="form-group">
+      <label for="systemPrompt">System Prompt (optional):</label>
+      <textarea id="systemPrompt" rows="4" placeholder="You are a helpful assistant that..."></textarea>
+      <small>Custom instructions for how the AI should behave</small>
+    </div>
+
+    <button id="saveBtn">Save Settings</button>
+    <button id="openSidePanel">Open Assistant</button>
+    
+    <div id="status"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
