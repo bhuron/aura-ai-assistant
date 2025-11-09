@@ -56,6 +56,21 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   switchToTab(activeInfo.tabId);
 });
 
+// Listen for new tabs or tab updates
+chrome.tabs.onCreated.addListener(() => {
+  loadTabs();
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.title || changeInfo.url) {
+    loadTabs();
+  }
+});
+
+chrome.tabs.onRemoved.addListener(() => {
+  loadTabs();
+});
+
 async function initializeTabConversation() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) {
