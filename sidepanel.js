@@ -32,7 +32,7 @@ document.getElementById('modelSelector').addEventListener('change', handleModelC
 
 document.getElementById('clearChat').addEventListener('click', () => {
   conversationHistory = [];
-  selectedTabIds.clear();
+  selectedTabIds = new Set();
   document.getElementById('messages').innerHTML = '';
   
   // Clear from storage
@@ -79,11 +79,12 @@ async function initializeTabConversation() {
 }
 
 function switchToTab(tabId) {
-  // Save current conversation
+  // Save current conversation and selected tabs
   if (currentTabId !== null) {
     conversationsByTab[currentTabId] = {
       history: conversationHistory,
-      messages: document.getElementById('messages').innerHTML
+      messages: document.getElementById('messages').innerHTML,
+      selectedTabs: new Set(selectedTabIds)
     };
   }
   
@@ -92,11 +93,16 @@ function switchToTab(tabId) {
   if (conversationsByTab[tabId]) {
     conversationHistory = conversationsByTab[tabId].history;
     document.getElementById('messages').innerHTML = conversationsByTab[tabId].messages;
+    selectedTabIds = conversationsByTab[tabId].selectedTabs || new Set();
   } else {
     conversationHistory = [];
     document.getElementById('messages').innerHTML = '';
+    selectedTabIds = new Set();
     showSuggestedPrompts();
   }
+  
+  // Update selected tabs display
+  updateSelectedTabs();
   
   // Scroll to bottom
   const messagesDiv = document.getElementById('messages');
