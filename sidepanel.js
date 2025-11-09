@@ -54,24 +54,12 @@ initializeTabConversation();
 // Listen for tab changes
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   switchToTab(activeInfo.tabId);
-  const tab = await chrome.tabs.get(activeInfo.tabId);
-  // Update selected tabs to show current tab
-  if (tab && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
-    selectedTabIds.clear();
-    selectedTabIds.add(tab.id);
-    updateSelectedTabs();
-  }
 });
 
 async function initializeTabConversation() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) {
     switchToTab(tab.id);
-    // Add current tab to selected tabs if it's accessible
-    if (tab && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
-      selectedTabIds.add(tab.id);
-      updateSelectedTabs();
-    }
   }
 }
 
@@ -319,16 +307,20 @@ async function sendMessage() {
   isGenerating = true;
   updateSendButton();
   
-  // Get content from selected tabs or current tab
+  // Always get current tab content
   let pageContents = [];
+  const currentContent = await getPageContent();
+  if (currentContent) pageContents.push(currentContent);
+  
+  // Add any @mentioned tabs (excluding current tab to avoid duplicates)
   if (selectedTabIds.size > 0) {
+    const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     for (const tabId of selectedTabIds) {
-      const content = await getPageContentFromTab(tabId);
-      if (content) pageContents.push(content);
+      if (tabId !== currentTab.id) {
+        const content = await getPageContentFromTab(tabId);
+        if (content) pageContents.push(content);
+      }
     }
-  } else {
-    const content = await getPageContent();
-    if (content) pageContents.push(content);
   }
   
   // Create streaming message
