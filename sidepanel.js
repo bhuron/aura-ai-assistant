@@ -8,11 +8,8 @@ let currentPort = null;
 let isGenerating = false;
 
 const suggestedPrompts = [
-  'Summarize this page',
-  'What are the key points?',
-  'Explain this in simple terms',
-  'Find the main arguments',
-  'What questions does this raise?'
+  'Summarize',
+  'Explain'
 ];
 
 document.getElementById('sendBtn').addEventListener('click', () => {
@@ -55,14 +52,26 @@ loadModelSelector();
 initializeTabConversation();
 
 // Listen for tab changes
-chrome.tabs.onActivated.addListener((activeInfo) => {
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
   switchToTab(activeInfo.tabId);
+  const tab = await chrome.tabs.get(activeInfo.tabId);
+  // Update selected tabs to show current tab
+  if (tab && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+    selectedTabIds.clear();
+    selectedTabIds.add(tab.id);
+    updateSelectedTabs();
+  }
 });
 
 async function initializeTabConversation() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) {
     switchToTab(tab.id);
+    // Add current tab to selected tabs if it's accessible
+    if (tab && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+      selectedTabIds.add(tab.id);
+      updateSelectedTabs();
+    }
   }
 }
 
@@ -273,14 +282,17 @@ function updateSelectedTabs() {
     return;
   }
   
-  container.style.display = 'block';
+  container.style.display = 'flex';
   const selectedTabs = availableTabs.filter(tab => selectedTabIds.has(tab.id));
-  container.innerHTML = selectedTabs.map(tab => 
-    `<span class="selected-tab">
-      <span>${tab.title}</span>
+  container.innerHTML = selectedTabs.map(tab => {
+    const domain = new URL(tab.url).hostname;
+    const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+    return `<span class="selected-tab">
+      <img src="${faviconUrl}" class="selected-tab-favicon" alt="" onerror="this.style.display='none'">
+      <span class="selected-tab-title">${tab.title}</span>
       <button class="remove-tab" data-tab-id="${tab.id}">×</button>
-    </span>`
-  ).join('');
+    </span>`;
+  }).join('');
   
   container.querySelectorAll('.remove-tab').forEach(btn => {
     btn.addEventListener('click', () => {
