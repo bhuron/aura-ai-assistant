@@ -1,3 +1,8 @@
+// Open side panel when clicking extension icon
+chrome.action.onClicked.addListener(async (tab) => {
+  await chrome.sidePanel.open({ windowId: tab.windowId });
+});
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'chat') {
     handleChat(request).then(sendResponse);

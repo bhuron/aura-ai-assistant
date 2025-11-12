@@ -44,11 +44,7 @@ document.getElementById('saveBtn').addEventListener('click', () => {
   });
 });
 
-document.getElementById('openSidePanel').addEventListener('click', () => {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    chrome.sidePanel.open({ tabId: tabs[0].id });
-  });
-});
+
 
 function showStatus(message, type) {
   const status = document.getElementById('status');
