@@ -132,33 +132,45 @@ function hideSuggestedPrompts() {
 }
 
 async function loadModelSelector() {
-  const settings = await chrome.storage.sync.get(['model', 'apiProvider', 'customModels']);
+  const settings = await chrome.storage.sync.get(['providers', 'defaultModel']);
   const selector = document.getElementById('modelSelector');
   
-  const provider = settings.apiProvider || 'openai';
-  currentModel = settings.model || (provider === 'openai' ? 'gpt-4' : 'claude-3-5-sonnet-20241022');
+  const providers = settings.providers || [];
   
-  let models = [];
-  if (provider === 'openai') {
-    models = ['gpt-4', 'gpt-4-turbo', 'gpt-4o', 'gpt-3.5-turbo'];
-  } else if (provider === 'anthropic') {
-    models = ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'];
-  } else if (settings.customModels) {
-    models = settings.customModels.split(',').map(m => m.trim());
-  } else {
-    models = [currentModel];
+  // Collect all models from all providers
+  let allModels = [];
+  
+  providers.forEach(provider => {
+    if (provider.apiKey && provider.models) {
+      provider.models.forEach(model => {
+        if (!allModels.includes(model)) {
+          allModels.push(model);
+        }
+      });
+    }
+  });
+  
+  if (allModels.length === 0) {
+    selector.innerHTML = '<option>No models configured</option>';
+    selector.disabled = true;
+    return;
   }
   
-  // Ensure current model is in the list
-  if (!models.includes(currentModel)) {
-    models.unshift(currentModel);
-  }
+  currentModel = settings.defaultModel || allModels[0];
+  selector.disabled = false;
   
-  selector.innerHTML = models.map(model => 
+  selector.innerHTML = allModels.map(model => 
     `<option value="${model}" ${model === currentModel ? 'selected' : ''}>${model}</option>`
   ).join('');
   selector.style.display = 'inline-block';
 }
+
+// Listen for settings updates
+chrome.runtime.onMessage.addListener((request) => {
+  if (request.action === 'settingsUpdated') {
+    loadModelSelector();
+  }
+});
 
 async function handleModelChange(e) {
   currentModel = e.target.value;

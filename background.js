@@ -28,17 +28,23 @@ chrome.runtime.onConnect.addListener((port) => {
 
 async function handleChatStream(request, port) {
   try {
-    const settings = await chrome.storage.sync.get(['apiKey', 'apiProvider', 'apiUrl', 'model', 'systemPrompt']);
+    const settings = await chrome.storage.sync.get(['providers', 'systemPrompt']);
     
-    if (!settings.apiKey) {
-      port.postMessage({ error: 'Please configure your API key in the extension settings' });
+    const providers = settings.providers || [];
+    if (providers.length === 0) {
+      port.postMessage({ error: 'Please configure at least one provider in settings' });
       return;
     }
 
-    const modelToUse = request.model || settings.model;
-    const settingsWithModel = { ...settings, model: modelToUse };
+    const modelToUse = request.model;
+    const provider = findProviderForModel(providers, modelToUse);
     
-    const { apiUrl, headers, body } = buildApiRequest(settingsWithModel, request, true);
+    if (!provider) {
+      port.postMessage({ error: `No provider configured for model: ${modelToUse}` });
+      return;
+    }
+    
+    const { apiUrl, headers, body } = buildApiRequest(provider, settings.systemPrompt, request, true);
     
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -71,7 +77,7 @@ async function handleChatStream(request, port) {
           
           try {
             const parsed = JSON.parse(data);
-            const chunk = extractStreamChunk(parsed, settings.apiProvider);
+            const chunk = extractStreamChunk(parsed, provider.type);
             if (chunk) {
               port.postMessage({ chunk });
             }
@@ -88,18 +94,32 @@ async function handleChatStream(request, port) {
   }
 }
 
+function findProviderForModel(providers, modelName) {
+  for (const provider of providers) {
+    if (provider.models && provider.models.includes(modelName) && provider.apiKey) {
+      return provider;
+    }
+  }
+  return null;
+}
+
 async function handleChat(request) {
   try {
-    const settings = await chrome.storage.sync.get(['apiKey', 'apiProvider', 'apiUrl', 'model', 'systemPrompt']);
+    const settings = await chrome.storage.sync.get(['providers', 'systemPrompt']);
     
-    if (!settings.apiKey) {
-      return { error: 'Please configure your API key in the extension settings' };
+    const providers = settings.providers || [];
+    if (providers.length === 0) {
+      return { error: 'Please configure at least one provider in settings' };
     }
 
-    const modelToUse = request.model || settings.model;
-    const settingsWithModel = { ...settings, model: modelToUse };
+    const modelToUse = request.model;
+    const provider = findProviderForModel(providers, modelToUse);
     
-    const { apiUrl, headers, body } = buildApiRequest(settingsWithModel, request, false);
+    if (!provider) {
+      return { error: `No provider configured for model: ${modelToUse}` };
+    }
+    
+    const { apiUrl, headers, body } = buildApiRequest(provider, settings.systemPrompt, request, false);
     
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -113,7 +133,7 @@ async function handleChat(request) {
     }
 
     const data = await response.json();
-    const reply = extractReply(data, settings.apiProvider);
+    const reply = extractReply(data, provider.type);
     
     return { reply };
   } catch (error) {
@@ -121,14 +141,14 @@ async function handleChat(request) {
   }
 }
 
-function buildApiRequest(settings, request, stream = false) {
-  const provider = settings.apiProvider || 'openai';
-  const model = settings.model || 'gpt-4';
+function buildApiRequest(provider, systemPrompt, request, stream = false) {
+  const providerType = provider.type;
+  const model = request.model;
   
   let messages = [];
   
   // Build system message
-  let systemContent = settings.systemPrompt || 'You are a helpful AI assistant.';
+  let systemContent = systemPrompt || 'You are a helpful AI assistant.';
   
   // Add page context if available
   if (request.pageContents && request.pageContents.length > 0) {
@@ -156,12 +176,12 @@ function buildApiRequest(settings, request, stream = false) {
     content: request.message
   });
 
-  if (provider === 'openai') {
+  if (providerType === 'openai') {
     return {
       apiUrl: 'https://api.openai.com/v1/chat/completions',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${settings.apiKey}`
+        'Authorization': `Bearer ${provider.apiKey}`
       },
       body: {
         model: model,
@@ -169,7 +189,7 @@ function buildApiRequest(settings, request, stream = false) {
         stream: stream
       }
     };
-  } else if (provider === 'anthropic') {
+  } else if (providerType === 'anthropic') {
     // Anthropic uses a different format
     const systemMessage = messages.find(m => m.role === 'system');
     const userMessages = messages.filter(m => m.role !== 'system');
@@ -178,11 +198,11 @@ function buildApiRequest(settings, request, stream = false) {
       apiUrl: 'https://api.anthropic.com/v1/messages',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': settings.apiKey,
+        'x-api-key': provider.apiKey,
         'anthropic-version': '2023-06-01'
       },
       body: {
-        model: model || 'claude-3-5-sonnet-20241022',
+        model: model,
         max_tokens: 4096,
         system: systemMessage ? systemMessage.content : undefined,
         messages: userMessages,
@@ -192,10 +212,10 @@ function buildApiRequest(settings, request, stream = false) {
   } else {
     // Custom provider
     return {
-      apiUrl: settings.apiUrl,
+      apiUrl: provider.apiUrl,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${settings.apiKey}`
+        'Authorization': `Bearer ${provider.apiKey}`
       },
       body: {
         model: model,
@@ -206,8 +226,8 @@ function buildApiRequest(settings, request, stream = false) {
   }
 }
 
-function extractStreamChunk(data, provider) {
-  if (provider === 'anthropic') {
+function extractStreamChunk(data, providerType) {
+  if (providerType === 'anthropic') {
     if (data.type === 'content_block_delta' && data.delta?.text) {
       return data.delta.text;
     }

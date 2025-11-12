@@ -12,42 +12,29 @@
       <h2>Aura Settings</h2>
     </div>
     
-    <div class="form-group">
-      <label for="apiProvider">API Provider:</label>
-      <select id="apiProvider">
-        <option value="openai">OpenAI</option>
-        <option value="anthropic">Anthropic</option>
-        <option value="custom">Custom</option>
-      </select>
+    <div class="settings-section">
+      <h3>System Prompt</h3>
+      <div class="form-group">
+        <label for="systemPrompt">Custom instructions (optional):</label>
+        <textarea id="systemPrompt" rows="6" placeholder="You are a helpful assistant that..."></textarea>
+        <small>Define how the AI should behave across all conversations</small>
+      </div>
     </div>
 
-    <div class="form-group" id="customUrlGroup" style="display: none;">
-      <label for="apiUrl">API URL:</label>
-      <input type="text" id="apiUrl" placeholder="https://api.example.com/v1/chat/completions">
+    <div class="settings-section">
+      <h3>Providers & Models</h3>
+      <div id="providersList"></div>
+      <button id="addProviderBtn" class="secondary-btn">+ Add Provider</button>
+      
+      <div class="form-group" style="margin-top: 24px;">
+        <label for="defaultModel">Default Model:</label>
+        <select id="defaultModel">
+          <option value="">Select a default model</option>
+        </select>
+        <small>This model will be selected by default when opening Aura</small>
+      </div>
     </div>
-
-    <div class="form-group">
-      <label for="apiKey">API Key:</label>
-      <input type="password" id="apiKey" placeholder="Enter your API key">
-    </div>
-
-    <div class="form-group">
-      <label for="model">Default Model:</label>
-      <input type="text" id="model" placeholder="gpt-4">
-    </div>
-
-    <div class="form-group" id="customModelsGroup">
-      <label for="customModels">Available Models (comma-separated):</label>
-      <input type="text" id="customModels" placeholder="model-1, model-2, model-3">
-      <small>For custom providers, list all models you want to switch between</small>
-    </div>
-
-    <div class="form-group">
-      <label for="systemPrompt">System Prompt (optional):</label>
-      <textarea id="systemPrompt" rows="4" placeholder="You are a helpful assistant that..."></textarea>
-      <small>Custom instructions for how the AI should behave</small>
-    </div>
-
+    
     <button id="saveBtn">Save Settings</button>
     
     <div id="status"></div>
