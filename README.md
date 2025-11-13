@@ -76,23 +76,6 @@ You can configure multiple providers and models:
 - Click **↻** to refresh the tab list
 - Click **✕** to clear the conversation
 
-## 🔑 API Providers
-
-### OpenAI
-- **Models:** `gpt-4`, `gpt-4-turbo`, `gpt-4o`, `gpt-3.5-turbo`
-- **Get API key:** https://platform.openai.com/api-keys
-- **Pricing:** ~$0.03 per 1K tokens (GPT-4)
-
-### Anthropic
-- **Models:** `claude-3-5-sonnet-20241022`, `claude-3-opus-20240229`, `claude-3-sonnet-20240229`
-- **Get API key:** https://console.anthropic.com/
-- **Pricing:** ~$0.003 per 1K input tokens (Claude 3.5 Sonnet)
-
-### Custom Providers
-- Use any OpenAI-compatible API endpoint
-- Enter the full URL (e.g., `https://api.example.com/v1/chat/completions`)
-- Supports local models via LM Studio, Ollama, etc.
-
 ## 💡 Tips
 
 - **Costs:** You pay your AI provider directly based on usage
@@ -100,25 +83,3 @@ You can configure multiple providers and models:
 - **Privacy:** API keys stored locally in Chrome's sync storage
 - **Conversations:** Each tab maintains its own conversation history
 - **Model switching:** Change models mid-conversation without losing context
-
-## 🛠️ Technical Details
-
-- **Manifest Version:** 3
-- **Permissions:** activeTab, storage, sidePanel, scripting
-- **Supported browsers:** Chrome, Edge, Brave, Vivaldi (Chromium-based)
-- **Content extraction:** Sanitizes text to prevent JSON parsing errors
-- **Streaming:** Uses Server-Sent Events for real-time responses
-
-## 📝 Notes
-
-- Icon files (icon16.png, icon48.png, icon128.png) should be added for a complete installation
-- The extension works best on regular web pages (not chrome:// pages)
-- YouTube transcript extraction requires videos to have captions enabled
-
-## 🤝 Contributing
-
-This is an open-source project. Feel free to submit issues or pull requests!
-
-## 📄 License
-
-MIT License - feel free to use and modify as needed.
