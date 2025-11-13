@@ -47,7 +47,7 @@ function extractPageContent() {
   const text = clone.innerText || clone.textContent;
   
   // Limit content length
-  const maxLength = 8000;
+  const maxLength = 32000;
   const truncatedText = text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   
   return {
@@ -81,7 +81,7 @@ function extractYouTubeTranscript() {
             .filter(text => text)
             .join(' ');
           
-          return transcript.substring(0, 12000); // Larger limit for transcripts
+          return transcript.substring(0, 50000); // Larger limit for transcripts
         }
       }, 500);
     }
@@ -89,7 +89,7 @@ function extractYouTubeTranscript() {
     // Fallback: try to get video description
     const description = document.querySelector('#description-inline-expander')?.textContent?.trim();
     if (description) {
-      return `Video Description:\n${description.substring(0, 8000)}`;
+      return `Video Description:\n${description.substring(0, 32000)}`;
     }
     
     return null;
