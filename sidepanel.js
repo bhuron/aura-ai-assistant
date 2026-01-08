@@ -1,3 +1,10 @@
+// Helper function to escape HTML to prevent XSS
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 // Configure marked to disable raw HTML rendering for security
 if (typeof marked !== 'undefined' && marked.use) {
   marked.use({
@@ -103,7 +110,6 @@ function switchToTab(tabId) {
   if (currentTabId !== null) {
     conversationsByTab[currentTabId] = {
       history: conversationHistory,
-      messages: document.getElementById('messages').innerHTML,
       selectedTabs: new Set(selectedTabIds)
     };
   }
@@ -112,8 +118,9 @@ function switchToTab(tabId) {
   currentTabId = tabId;
   if (conversationsByTab[tabId]) {
     conversationHistory = conversationsByTab[tabId].history;
-    document.getElementById('messages').innerHTML = conversationsByTab[tabId].messages;
     selectedTabIds = conversationsByTab[tabId].selectedTabs || new Set();
+    // Re-render all messages from history instead of restoring innerHTML
+    renderAllMessages();
   } else {
     conversationHistory = [];
     document.getElementById('messages').innerHTML = '';
@@ -182,9 +189,9 @@ async function loadModelSelector() {
   
   currentModel = settings.defaultModel || allModels[0];
   selector.disabled = false;
-  
-  selector.innerHTML = allModels.map(model => 
-    `<option value="${model}" ${model === currentModel ? 'selected' : ''}>${model}</option>`
+
+  selector.innerHTML = allModels.map(model =>
+    `<option value="${escapeHtml(model)}" ${model === currentModel ? 'selected' : ''}>${escapeHtml(model)}</option>`
   ).join('');
   selector.style.display = 'inline-block';
 }
@@ -624,6 +631,16 @@ async function getPageContentFromTab(tabId) {
 }
 
 let messageIdCounter = 0;
+
+function renderAllMessages() {
+  const messagesDiv = document.getElementById('messages');
+  messagesDiv.innerHTML = '';
+  messageIdCounter = 0;
+
+  conversationHistory.forEach(msg => {
+    addMessage(msg.content, msg.role);
+  });
+}
 
 function addMessage(text, sender, isLoading = false) {
   const messagesDiv = document.getElementById('messages');
