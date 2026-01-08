@@ -1,6 +1,13 @@
 let providers = [];
 let defaultModel = '';
 
+// Helper function to escape HTML to prevent XSS
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 // Load saved settings
 chrome.storage.sync.get(['providers', 'systemPrompt', 'defaultModel'], (result) => {
   if (result.systemPrompt) document.getElementById('systemPrompt').value = result.systemPrompt;
@@ -33,35 +40,35 @@ function renderProviders() {
         </select>
         <button class="remove-provider-btn" data-index="${index}">Remove</button>
       </div>
-      
+
       ${provider.type === 'custom' ? `
         <div class="form-group">
           <label>API URL:</label>
-          <input type="text" class="provider-url" data-index="${index}" value="${provider.apiUrl || ''}" placeholder="https://api.example.com/v1/chat/completions">
+          <input type="text" class="provider-url" data-index="${index}" value="${escapeHtml(provider.apiUrl || '')}" placeholder="https://api.example.com/v1/chat/completions">
         </div>
       ` : ''}
-      
+
       <div class="form-group">
         <label>API Key:</label>
-        <input type="password" class="provider-key" data-index="${index}" value="${provider.apiKey || ''}" placeholder="Enter API key">
+        <input type="password" class="provider-key" data-index="${index}" value="${escapeHtml(provider.apiKey || '')}" placeholder="Enter API key">
       </div>
-      
+
       <div class="form-group">
         <label>Models (comma-separated):</label>
-        <input type="text" class="provider-models" data-index="${index}" value="${provider.models.join(', ')}" placeholder="gpt-4, gpt-3.5-turbo">
+        <input type="text" class="provider-models" data-index="${index}" value="${escapeHtml(provider.models.join(', '))}" placeholder="gpt-4, gpt-3.5-turbo">
       </div>
     </div>
   `).join('');
-  
+
   // Add event listeners
   container.querySelectorAll('.provider-type').forEach(el => {
     el.addEventListener('change', (e) => {
       const index = parseInt(e.target.dataset.index);
       const oldType = providers[index].type;
       const newType = e.target.value;
-      
+
       providers[index].type = newType;
-      
+
       // Set default models when switching provider type
       if (newType === 'openai' && oldType !== 'openai') {
         providers[index].models = ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'];
@@ -71,26 +78,26 @@ function renderProviders() {
         providers[index].models = [];
         providers[index].apiUrl = '';
       }
-      
+
       renderProviders();
       updateDefaultModelDropdown();
     });
   });
-  
+
   container.querySelectorAll('.provider-key').forEach(el => {
     el.addEventListener('input', (e) => {
       const index = parseInt(e.target.dataset.index);
       providers[index].apiKey = e.target.value;
     });
   });
-  
+
   container.querySelectorAll('.provider-url').forEach(el => {
     el.addEventListener('input', (e) => {
       const index = parseInt(e.target.dataset.index);
       providers[index].apiUrl = e.target.value;
     });
   });
-  
+
   container.querySelectorAll('.provider-models').forEach(el => {
     el.addEventListener('input', (e) => {
       const index = parseInt(e.target.dataset.index);
@@ -98,7 +105,7 @@ function renderProviders() {
       updateDefaultModelDropdown();
     });
   });
-  
+
   container.querySelectorAll('.remove-provider-btn').forEach(el => {
     el.addEventListener('click', (e) => {
       const index = parseInt(e.target.dataset.index);
@@ -111,7 +118,7 @@ function renderProviders() {
 
 function updateDefaultModelDropdown() {
   const dropdown = document.getElementById('defaultModel');
-  
+
   // Collect all models from all providers
   const allModels = [];
   providers.forEach(provider => {
@@ -123,10 +130,10 @@ function updateDefaultModelDropdown() {
       });
     }
   });
-  
+
   dropdown.innerHTML = '<option value="">Select a default model</option>' +
-    allModels.map(model => 
-      `<option value="${model}" ${model === defaultModel ? 'selected' : ''}>${model}</option>`
+    allModels.map(model =>
+      `<option value="${escapeHtml(model)}" ${model === defaultModel ? 'selected' : ''}>${escapeHtml(model)}</option>`
     ).join('');
 }
 
