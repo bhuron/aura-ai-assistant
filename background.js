@@ -1,3 +1,59 @@
+// Helper function to validate custom API URLs to prevent SSRF
+function validateApiUrl(url) {
+  if (!url || typeof url !== 'string') {
+    return { valid: false, error: 'Invalid URL' };
+  }
+
+  try {
+    const parsed = new URL(url);
+
+    // Only allow http and https schemes
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return { valid: false, error: 'Only HTTP and HTTPS URLs are allowed' };
+    }
+
+    // Allow localhost and private network IPs for development/internal use
+    const hostname = parsed.hostname.toLowerCase();
+    const isLocalhost = hostname === 'localhost' ||
+                        hostname === '127.0.0.1' ||
+                        hostname.startsWith('127.') ||
+                        hostname.startsWith('192.168.') ||
+                        hostname.startsWith('10.') ||
+                        hostname.startsWith('172.16.') ||
+                        hostname === '[::1]';
+
+    // For non-local URLs, require HTTPS for security
+    if (!isLocalhost && parsed.protocol !== 'https:') {
+      return { valid: false, error: 'HTTPS is required for remote endpoints' };
+    }
+
+    return { valid: true };
+  } catch (e) {
+    return { valid: false, error: 'Invalid URL format' };
+  }
+}
+
+// Helper function to sanitize API error messages
+function sanitizeError(status, errorText) {
+  // Keep status code but limit error details to prevent information leakage
+  const maxErrorLength = 200;
+  let sanitized = errorText || '';
+
+  // Truncate long error messages
+  if (sanitized.length > maxErrorLength) {
+    sanitized = sanitized.substring(0, maxErrorLength) + '...';
+  }
+
+  // Remove potential stack traces or sensitive patterns
+  sanitized = sanitized
+    .replace(/at [^\n]+/g, '[stack trace removed]')
+    .replace(/\/[^\s]*\/[^\s]*/g, '[path]')
+    .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, '[email]')
+    .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '[IP]');
+
+  return `API error ${status}: ${sanitized}`;
+}
+
 // Open side panel when clicking extension icon
 chrome.action.onClicked.addListener(async (tab) => {
   await chrome.sidePanel.open({ windowId: tab.windowId });
@@ -54,7 +110,7 @@ async function handleChatStream(request, port) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      port.postMessage({ error: `API error: ${response.status} - ${errorText}` });
+      port.postMessage({ error: sanitizeError(response.status, errorText) });
       return;
     }
 
@@ -129,7 +185,7 @@ async function handleChat(request) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      return { error: `API error: ${response.status} - ${errorText}` };
+      return { error: sanitizeError(response.status, errorText) };
     }
 
     const data = await response.json();
@@ -211,6 +267,12 @@ function buildApiRequest(provider, systemPrompt, request, stream = false) {
     };
   } else {
     // Custom provider
+    // Validate the custom API URL
+    const validation = validateApiUrl(provider.apiUrl);
+    if (!validation.valid) {
+      throw new Error(`Invalid API URL: ${validation.error}`);
+    }
+
     return {
       apiUrl: provider.apiUrl,
       headers: {
