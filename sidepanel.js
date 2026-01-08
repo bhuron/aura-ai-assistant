@@ -1,3 +1,18 @@
+// Configure marked to disable raw HTML rendering for security
+if (typeof marked !== 'undefined' && marked.use) {
+  marked.use({
+    renderer: {
+      html: function(html) {
+        // Return escaped HTML to prevent XSS
+        return html
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+    }
+  });
+}
+
 let conversationHistory = [];
 let availableTabs = [];
 let selectedTabIds = new Set();
@@ -236,15 +251,15 @@ function handleAtMention(e) {
 }
 
 function showTabSuggestions(query, position) {
-  const suggestions = availableTabs.filter(tab => 
+  const suggestions = availableTabs.filter(tab =>
     tab.title.toLowerCase().includes(query.toLowerCase())
   ).slice(0, 5);
-  
+
   if (suggestions.length === 0) {
     hideTabSuggestions();
     return;
   }
-  
+
   let dropdown = document.getElementById('tabSuggestions');
   if (!dropdown) {
     dropdown = document.createElement('div');
@@ -252,23 +267,40 @@ function showTabSuggestions(query, position) {
     dropdown.className = 'tab-suggestions';
     document.querySelector('.input-container').appendChild(dropdown);
   }
-  
-  dropdown.innerHTML = suggestions.map(tab => 
-    `<div class="tab-suggestion" data-tab-id="${tab.id}" data-tab-title="${tab.title}">
-      <div class="tab-title">${tab.title}</div>
-      <div class="tab-url">${tab.url}</div>
-    </div>`
-  ).join('');
-  
-  dropdown.querySelectorAll('.tab-suggestion').forEach(el => {
-    el.addEventListener('click', () => {
-      const tabId = parseInt(el.dataset.tabId);
-      const tabTitle = el.dataset.tabTitle;
+
+  // Remove all existing children
+  while (dropdown.firstChild) {
+    dropdown.removeChild(dropdown.firstChild);
+  }
+
+  // Create suggestion items using safe DOM methods
+  suggestions.forEach(tab => {
+    const suggestion = document.createElement('div');
+    suggestion.className = 'tab-suggestion';
+    suggestion.dataset.tabId = tab.id;
+    suggestion.dataset.tabTitle = tab.title;
+
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'tab-title';
+    titleDiv.textContent = tab.title;
+
+    const urlDiv = document.createElement('div');
+    urlDiv.className = 'tab-url';
+    urlDiv.textContent = tab.url;
+
+    suggestion.appendChild(titleDiv);
+    suggestion.appendChild(urlDiv);
+
+    suggestion.addEventListener('click', () => {
+      const tabId = parseInt(suggestion.dataset.tabId);
+      const tabTitle = suggestion.dataset.tabTitle;
       insertTabMention(tabId, tabTitle);
       hideTabSuggestions();
     });
+
+    dropdown.appendChild(suggestion);
   });
-  
+
   dropdown.style.display = 'block';
 }
 
@@ -306,29 +338,51 @@ function updateSelectedTabs() {
     container.className = 'selected-tabs-container';
     document.querySelector('.chat-header').after(container);
   }
-  
+
   if (selectedTabIds.size === 0) {
     container.style.display = 'none';
     return;
   }
-  
+
   container.style.display = 'flex';
   const selectedTabs = availableTabs.filter(tab => selectedTabIds.has(tab.id));
-  container.innerHTML = selectedTabs.map(tab => {
+
+  // Remove all existing children
+  while (container.firstChild) {
+    container.removeChild(container.firstChild);
+  }
+
+  // Create tab elements using safe DOM methods
+  selectedTabs.forEach(tab => {
     const domain = new URL(tab.url).hostname;
-    const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
-    return `<span class="selected-tab">
-      <img src="${faviconUrl}" class="selected-tab-favicon" alt="" onerror="this.style.display='none'">
-      <span class="selected-tab-title">${tab.title}</span>
-      <button class="remove-tab" data-tab-id="${tab.id}">×</button>
-    </span>`;
-  }).join('');
-  
-  container.querySelectorAll('.remove-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      selectedTabIds.delete(parseInt(btn.dataset.tabId));
+    const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
+
+    const tabSpan = document.createElement('span');
+    tabSpan.className = 'selected-tab';
+
+    const favicon = document.createElement('img');
+    favicon.src = faviconUrl;
+    favicon.className = 'selected-tab-favicon';
+    favicon.alt = '';
+    favicon.onerror = function() { this.style.display = 'none'; };
+
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'selected-tab-title';
+    titleSpan.textContent = tab.title;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-tab';
+    removeBtn.dataset.tabId = tab.id;
+    removeBtn.textContent = '×';
+    removeBtn.addEventListener('click', () => {
+      selectedTabIds.delete(parseInt(removeBtn.dataset.tabId));
       updateSelectedTabs();
     });
+
+    tabSpan.appendChild(favicon);
+    tabSpan.appendChild(titleSpan);
+    tabSpan.appendChild(removeBtn);
+    container.appendChild(tabSpan);
   });
 }
 
