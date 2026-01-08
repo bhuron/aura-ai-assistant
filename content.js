@@ -3,6 +3,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'getContent') {
     const content = extractPageContent();
     sendResponse(content);
+  } else if (request.action === 'getSelectedText') {
+    const selection = window.getSelection();
+    const selectedText = selection.toString().trim();
+    sendResponse({ success: true, text: selectedText });
+  } else if (request.action === 'clearSelection') {
+    window.getSelection().removeAllRanges();
+    sendResponse({ success: true });
   }
   return true;
 });

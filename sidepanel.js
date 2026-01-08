@@ -6,6 +6,8 @@ let currentTabId = null;
 let conversationsByTab = {}; // Store conversations per tab
 let currentPort = null;
 let isGenerating = false;
+let selectedText = ''; // Track selected text from current tab
+let selectedTextPollingInterval = null;
 
 const suggestedPrompts = [
   'Summarize',
@@ -33,14 +35,16 @@ document.getElementById('modelSelector').addEventListener('change', handleModelC
 document.getElementById('clearChat').addEventListener('click', () => {
   conversationHistory = [];
   selectedTabIds = new Set();
+  selectedText = '';
   document.getElementById('messages').innerHTML = '';
-  
+
   // Clear from storage
   if (currentTabId !== null) {
     delete conversationsByTab[currentTabId];
   }
-  
+
   updateSelectedTabs();
+  updateSelectedTextIndicator();
   showSuggestedPrompts();
 });
 
@@ -50,6 +54,7 @@ document.getElementById('refreshTabs').addEventListener('click', loadTabs);
 loadTabs();
 loadModelSelector();
 initializeTabConversation();
+startSelectedTextPolling();
 
 // Listen for tab changes
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
@@ -87,7 +92,7 @@ function switchToTab(tabId) {
       selectedTabs: new Set(selectedTabIds)
     };
   }
-  
+
   // Load conversation for new tab
   currentTabId = tabId;
   if (conversationsByTab[tabId]) {
@@ -100,10 +105,14 @@ function switchToTab(tabId) {
     selectedTabIds = new Set();
     showSuggestedPrompts();
   }
-  
+
+  // Clear selected text when switching tabs (it's from the old tab)
+  selectedText = '';
+  updateSelectedTextIndicator();
+
   // Update selected tabs display
   updateSelectedTabs();
-  
+
   // Scroll to bottom
   const messagesDiv = document.getElementById('messages');
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -323,6 +332,95 @@ function updateSelectedTabs() {
   });
 }
 
+async function startSelectedTextPolling() {
+  // Poll every 500ms for selected text changes
+  selectedTextPollingInterval = setInterval(async () => {
+    await checkSelectedText();
+  }, 500);
+}
+
+async function checkSelectedText() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+      return;
+    }
+
+    const response = await chrome.tabs.sendMessage(tab.id, { action: 'getSelectedText' });
+    const newSelectedText = response?.text || '';
+
+    // Only update if selection changed
+    if (newSelectedText !== selectedText) {
+      selectedText = newSelectedText;
+      updateSelectedTextIndicator();
+    }
+  } catch (error) {
+    // Tab might not be ready, ignore
+  }
+}
+
+function updateSelectedTextIndicator() {
+  let container = document.getElementById('selectedTextContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'selectedTextContainer';
+    container.className = 'selected-text-container';
+    // Insert before the input container
+    const inputContainer = document.querySelector('.input-container');
+    inputContainer.before(container);
+  }
+
+  if (!selectedText) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'flex';
+
+  // Truncate selected text for display
+  const maxLength = 100;
+  const displayText = selectedText.length > maxLength
+    ? selectedText.substring(0, maxLength) + '...'
+    : selectedText;
+
+  // Use safe DOM methods to avoid XSS
+  container.innerHTML = '';
+  const indicator = document.createElement('span');
+  indicator.className = 'selected-text-indicator';
+
+  const icon = document.createElement('span');
+  icon.className = 'selected-text-icon';
+  icon.textContent = '"';
+
+  const content = document.createElement('span');
+  content.className = 'selected-text-content';
+  content.textContent = displayText;
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'remove-selection';
+  removeBtn.title = 'Clear selection';
+  removeBtn.textContent = '×';
+  removeBtn.addEventListener('click', async () => {
+    // Clear the actual selection on the page
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab) {
+        await chrome.tabs.sendMessage(tab.id, { action: 'clearSelection' });
+      }
+    } catch (error) {
+      console.error('Failed to clear selection:', error);
+    }
+    // Clear our local state
+    selectedText = '';
+    updateSelectedTextIndicator();
+  });
+
+  indicator.appendChild(icon);
+  indicator.appendChild(content);
+  indicator.appendChild(removeBtn);
+  container.appendChild(indicator);
+}
+
 async function sendMessage() {
   if (isGenerating) return;
   
@@ -343,8 +441,19 @@ async function sendMessage() {
   // Always get current tab content
   let pageContents = [];
   const currentContent = await getPageContent();
-  if (currentContent) pageContents.push(currentContent);
-  
+  if (currentContent) {
+    // If there's selected text, add it as a separate context item
+    if (selectedText) {
+      pageContents.push({
+        title: 'Selected Text',
+        url: currentContent.url,
+        content: selectedText,
+        type: 'selected-text'
+      });
+    }
+    pageContents.push(currentContent);
+  }
+
   // Add any @mentioned tabs (excluding current tab to avoid duplicates)
   if (selectedTabIds.size > 0) {
     const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
