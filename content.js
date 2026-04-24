@@ -1,8 +1,7 @@
 // Listen for messages from the side panel
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'getContent') {
-    const content = extractPageContent();
-    sendResponse(content);
+    extractPageContent().then(content => sendResponse(content));
   } else if (request.action === 'getSelectedText') {
     const selection = window.getSelection();
     const selectedText = selection.toString().trim();
@@ -26,14 +25,14 @@ function sanitizeText(text) {
     .trim();
 }
 
-function extractPageContent() {
+async function extractPageContent() {
   // Get page title
   const title = document.title;
   const url = window.location.href;
-  
+
   // Check if it's a YouTube video
   if (url.includes('youtube.com/watch')) {
-    const transcript = extractYouTubeTranscript();
+    const transcript = await extractYouTubeTranscript();
     if (transcript) {
       return {
         title: sanitizeText(title),
@@ -43,20 +42,20 @@ function extractPageContent() {
       };
     }
   }
-  
+
   // Get main text content
   const article = document.querySelector('article') || document.querySelector('main') || document.body;
-  
+
   // Remove script, style, and nav elements
   const clone = article.cloneNode(true);
   clone.querySelectorAll('script, style, nav, header, footer, iframe').forEach(el => el.remove());
-  
+
   const text = clone.innerText || clone.textContent;
-  
+
   // Limit content length
   const maxLength = 32000;
   const truncatedText = text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
-  
+
   return {
     title: sanitizeText(title),
     url: url,
@@ -65,43 +64,61 @@ function extractPageContent() {
   };
 }
 
-function extractYouTubeTranscript() {
+async function extractYouTubeTranscript() {
   try {
-    // Try to get transcript from the page
-    const transcriptButton = document.querySelector('button[aria-label*="transcript" i], button[aria-label*="Show transcript" i]');
-    
+    // Multiple possible selectors for the transcript button (YouTube changes these)
+    const transcriptButtonSelectors = [
+      'button[aria-label*="transcript" i]',
+      'button[aria-label*="Show transcript" i]',
+      'ytd-button-renderer button[aria-label*="transcript" i]',
+    ];
+
+    let transcriptButton = null;
+    for (const sel of transcriptButtonSelectors) {
+      transcriptButton = document.querySelector(sel);
+      if (transcriptButton) break;
+    }
+
     if (transcriptButton) {
       // Click to open transcript if not already open
-      if (!document.querySelector('ytd-transcript-renderer')) {
+      if (!document.querySelector('ytd-transcript-renderer, ytd-engagement-panel-section-list-renderer[engagement-panel-title*="transcript" i]')) {
         transcriptButton.click();
       }
-      
-      // Wait a bit for transcript to load
-      setTimeout(() => {
-        const transcriptSegments = document.querySelectorAll('ytd-transcript-segment-renderer');
-        if (transcriptSegments.length > 0) {
-          const transcript = Array.from(transcriptSegments)
-            .map(segment => {
-              const text = segment.querySelector('.segment-text')?.textContent?.trim();
-              return text;
-            })
-            .filter(text => text)
-            .join(' ');
-          
-          return transcript.substring(0, 50000); // Larger limit for transcripts
-        }
-      }, 500);
+
+      // Poll for transcript segments to appear (YouTube loads them asynchronously)
+      const transcript = await waitForTranscript(5000);
+      if (transcript) return transcript.substring(0, 50000);
     }
-    
+
     // Fallback: try to get video description
-    const description = document.querySelector('#description-inline-expander')?.textContent?.trim();
+    const descriptionEl = document.querySelector('#description-inline-expander, #description, ytd-expander #description');
+    const description = descriptionEl?.textContent?.trim();
     if (description) {
       return `Video Description:\n${description.substring(0, 32000)}`;
     }
-    
+
     return null;
   } catch (error) {
     console.error('Error extracting YouTube content:', error);
     return null;
   }
+}
+
+async function waitForTranscript(timeoutMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const segments = document.querySelectorAll(
+      'ytd-transcript-segment-renderer .segment-text, ' +
+      'ytd-transcript-segment-renderer yt-formatted-string'
+    );
+    if (segments.length > 0) {
+      const transcript = Array.from(segments)
+        .map(el => el.textContent?.trim())
+        .filter(text => text)
+        .join(' ');
+      if (transcript.length > 10) return transcript;
+    }
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  return null;
 }

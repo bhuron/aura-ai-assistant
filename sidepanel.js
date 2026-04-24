@@ -602,14 +602,6 @@ async function getPageContentFromTab(tabId) {
     
     try {
       const response = await chrome.tabs.sendMessage(tabId, { action: 'getContent' });
-      
-      // For YouTube, wait a bit longer for transcript
-      if (response && response.url && response.url.includes('youtube.com/watch')) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const retryResponse = await chrome.tabs.sendMessage(tabId, { action: 'getContent' });
-        return retryResponse || response;
-      }
-      
       return response;
     } catch (error) {
       // Content script not injected yet, try to inject it
