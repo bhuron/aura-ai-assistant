@@ -1,5 +1,8 @@
-// Listen for messages from the side panel
+let myTabId = null;
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (sender.tab) myTabId = sender.tab.id;
+
   if (request.action === 'getContent') {
     extractPageContent().then(content => sendResponse(content));
   } else if (request.action === 'getSelectedText') {
@@ -14,23 +17,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 function sanitizeText(text) {
-  // Remove control characters and problematic unicode
-  // Don't escape quotes/backslashes - JSON.stringify will handle that
   return text
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '') // Remove control chars
-    .replace(/\uFFFD/g, '') // Remove replacement character
-    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove more control chars
-    .replace(/[\uD800-\uDFFF]/g, '') // Remove unpaired surrogates
-    .replace(/\s+/g, ' ') // Collapse multiple spaces
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '')
+    .replace(/[�]/g, '')
+    .replace(/[\uD800-\uDFFF]/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
 async function extractPageContent() {
-  // Get page title
   const title = document.title;
   const url = window.location.href;
 
-  // Check if it's a YouTube video
   if (url.includes('youtube.com/watch')) {
     const transcript = await extractYouTubeTranscript();
     if (transcript) {
@@ -43,16 +41,10 @@ async function extractPageContent() {
     }
   }
 
-  // Get main text content
   const article = document.querySelector('article') || document.querySelector('main') || document.body;
-
-  // Remove script, style, and nav elements
   const clone = article.cloneNode(true);
   clone.querySelectorAll('script, style, nav, header, footer, iframe').forEach(el => el.remove());
-
   const text = clone.innerText || clone.textContent;
-
-  // Limit content length
   const maxLength = 32000;
   const truncatedText = text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 
@@ -66,35 +58,22 @@ async function extractPageContent() {
 
 async function extractYouTubeTranscript() {
   try {
-    // Multiple possible selectors for the transcript button (YouTube changes these)
-    const transcriptButtonSelectors = [
-      'button[aria-label*="transcript" i]',
-      'button[aria-label*="Show transcript" i]',
-      'ytd-button-renderer button[aria-label*="transcript" i]',
-    ];
-
-    let transcriptButton = null;
-    for (const sel of transcriptButtonSelectors) {
-      transcriptButton = document.querySelector(sel);
-      if (transcriptButton) break;
-    }
-
-    if (transcriptButton) {
-      // Click to open transcript if not already open
-      if (!document.querySelector('ytd-transcript-renderer, ytd-engagement-panel-section-list-renderer[engagement-panel-title*="transcript" i]')) {
-        transcriptButton.click();
+    // Attempt 1: Click transcript button and scrape the DOM
+    const button = findTranscriptButton();
+    if (button) {
+      if (!isTranscriptPanelOpen()) {
+        button.click();
+        await new Promise(r => setTimeout(r, 2000));
       }
-
-      // Poll for transcript segments to appear (YouTube loads them asynchronously)
-      const transcript = await waitForTranscript(5000);
-      if (transcript) return transcript.substring(0, 50000);
+      const domTranscript = await collectTranscriptFromDOM(5000);
+      if (domTranscript) return domTranscript.substring(0, 50000);
     }
 
-    // Fallback: try to get video description
-    const descriptionEl = document.querySelector('#description-inline-expander, #description, ytd-expander #description');
-    const description = descriptionEl?.textContent?.trim();
-    if (description) {
-      return `Video Description:\n${description.substring(0, 32000)}`;
+    // Fallback: video description
+    const descEl = document.querySelector('#description-inline-expander, #description, ytd-expander #description');
+    const desc = descEl?.textContent?.trim();
+    if (desc) {
+      return 'Video Description:\n' + desc.substring(0, 32000);
     }
 
     return null;
@@ -104,21 +83,41 @@ async function extractYouTubeTranscript() {
   }
 }
 
-async function waitForTranscript(timeoutMs) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const segments = document.querySelectorAll(
-      'ytd-transcript-segment-renderer .segment-text, ' +
-      'ytd-transcript-segment-renderer yt-formatted-string'
-    );
-    if (segments.length > 0) {
-      const transcript = Array.from(segments)
-        .map(el => el.textContent?.trim())
-        .filter(text => text)
-        .join(' ');
-      if (transcript.length > 10) return transcript;
-    }
-    await new Promise(resolve => setTimeout(resolve, 200));
+function findTranscriptButton() {
+  const selectors = [
+    'button[aria-label*="transcript" i]',
+    'button[aria-label*="Show transcript" i]',
+    'ytd-video-description-transcript-section-renderer button',
+  ];
+  for (const sel of selectors) {
+    const btn = document.querySelector(sel);
+    if (btn) return btn;
   }
   return null;
+}
+
+function isTranscriptPanelOpen() {
+  if (document.querySelector('button[aria-label*="Close transcript" i], button[aria-label*="Fermer la transcription" i]')) {
+    return true;
+  }
+  return !!document.querySelector(
+    'ytd-transcript-renderer, ytd-transcript-segment-list-renderer, #segments-container'
+  );
+}
+
+async function collectTranscriptFromDOM(timeoutMs) {
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    const segs = document.querySelectorAll('ytd-transcript-segment-renderer');
+    if (segs.length > 0) break;
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  const segments = document.querySelectorAll('ytd-transcript-segment-renderer');
+  const texts = Array.from(segments)
+    .map(el => el.textContent?.trim())
+    .filter(t => t);
+
+  return texts.length > 0 ? texts.join(' ') : null;
 }
